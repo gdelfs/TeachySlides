@@ -11,7 +11,7 @@ Backend service in **Python + FastAPI** that generates lesson slide decks from a
 - **POST /streaming** – Returns slides one by one via **Server-Sent Events (SSE)** while the rest are still being generated.
 - Optional **image** field on content slides (search query for an image).
 - Optional **question** (exercise) on one content slide in the middle.
-- Configurable LLM: **OpenAI** or **Google Gemini** via env.
+- Configurable LLM: **OpenAI** via env.
 
 ---
 
@@ -20,7 +20,7 @@ Backend service in **Python + FastAPI** that generates lesson slide decks from a
 ### 1. Clone and enter the repo
 
 ```bash
-git clone <repo-url>
+git clone <repo-url> #https://github.com/gdelfs/TeachySlides
 cd TeachySlides
 ```
 
@@ -28,6 +28,7 @@ cd TeachySlides
 
 ```bash
 python -m venv .venv
+
 # Windows
 .venv\Scripts\activate
 # Linux/macOS
@@ -46,7 +47,7 @@ Copy the example env file and set your API key:
 
 ```bash
 copy .env.example .env   # Windows
-# cp .env.example .env   # Linux/macOS
+cp .env.example .env   # Linux/macOS
 ```
 
 Edit `.env`:
@@ -62,6 +63,7 @@ OPENAI_API_KEY=sk-...
 # Login.
 # Go to API Keys.
 # Create or copy a key.
+# The api use is not included, even if you have GPT pro (my case)! Careful with billing.
 ```
 
 ---
@@ -206,14 +208,22 @@ Total slides = 1 (title) + 1 (agenda) + `n_slides` (content) + 1 (conclusion). F
 
 **How to consume:**
 
-- **JavaScript (fetch):** POST with body, then read `response.body` as a stream and parse each line starting with `data: `.
-- **Python (httpx):** POST with `json=payload`, then iterate `response.aiter_lines()` and parse `data: {...}`.
+- **Python (httpx):** POST with `json=payload`, stream the response, read SSE lines via `response.aiter_lines()`, and parse data: `JSON`. events.
 
-**Example (Python):**
+**Example in Python:**
+
+Requirement install
+
+```bash
+pip install httpx
+```
+
+Code
 
 ```python
 import httpx
 import json
+import asyncio
 
 payload = {
     "topic": "Photosynthesis",
@@ -221,26 +231,37 @@ payload = {
     "context": "",
     "n_slides": 3
 }
-with httpx.stream("POST", "http://localhost:8000/streaming", json=payload) as r:
-    for line in r.aiter_lines():
-        if line.startswith("data: "):
-            slide = json.loads(line[6:])
-            if "error" in slide:
-                print("Error:", slide["error"])
-            else:
-                print("Slide:", slide["type"], slide["title"])
+
+async def main():
+    timeout = httpx.Timeout(None)  
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        async with client.stream(
+            "POST",
+            "http://localhost:8000/streaming",
+            json=payload
+        ) as r:
+            i=1
+            async for line in r.aiter_lines():
+                if line and line.startswith("data: "):
+                    slide = json.loads(line[6:])
+                    if "error" in slide:
+                        print("Error:", slide["error"])
+                    else:
+                        print("\n\nSlide:" + str(i) + " - ", slide["type"],": ", slide["title"])
+                        if "content" in slide:
+                            print("Content:", slide["content"])
+
+                        if "image" in slide:
+                            print("Image:", slide["image"])
+
+                        if "question" in slide:
+                            print("Question:", slide["question"])
+                    i+=1
+
+asyncio.run(main())
+
 ```
-
-**Example (curl):**
-
-```bash
-curl -X POST http://localhost:8000/streaming \
-  -H "Content-Type: application/json" \
-  -d '{"topic": "Photosynthesis", "grade": "6th grade", "n_slides": 3}' \
-  -N
-```
-
-Each line `data: {...}` is one slide JSON.
 
 ---
 
@@ -257,7 +278,7 @@ TeachySlides/
 │   │   └── schemas.py     # Pydantic: Slide, SlideDeckRequest, etc.
 │   └── services/
 │       ├── __init__.py
-│       ├── llm_factory.py # OpenAI / Gemini
+│       ├── llm_factory.py # OpenAI
 │       ├── prompts.py     # Prompt templates
 │       └── slides_service.py  # LangChain: full deck + stream
 ├── .env.example
