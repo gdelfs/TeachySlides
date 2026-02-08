@@ -1,6 +1,9 @@
 # Teachy Slides – AI Slide Deck Generation Service
 By Gabriel Delfino
 
+[Demo](https://youtu.be/MeET-0_sfEE)
+
+
 Backend service in **Python + FastAPI** that generates lesson slide decks from a topic, student grade, and teacher context. Uses **LangChain** for GenAI orchestration and **Pydantic** for typing.
 
 ---
@@ -20,7 +23,7 @@ Backend service in **Python + FastAPI** that generates lesson slide decks from a
 ### 1. Clone and enter the repo
 
 ```bash
-git clone <repo-url> #https://github.com/gdelfs/TeachySlides
+git clone https://github.com/gdelfs/TeachySlides
 cd TeachySlides
 ```
 
