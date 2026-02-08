@@ -88,6 +88,40 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ---
 
+## Tuning for many simultaneous requests
+
+To handle many concurrent requests without overloading the LLM API or the server:
+
+1. **Concurrency limit (semaphore)**  
+   At most `MAX_CONCURRENT_GENERATIONS` slide generations run at once (default: 10). Extra requests wait in queue. Set in `.env`:
+   ```env
+   MAX_CONCURRENT_GENERATIONS=10
+   ```
+
+2. **LLM timeout**  
+   Each LLM call times out after `LLM_REQUEST_TIMEOUT_SECONDS` (default: 60), so a stuck request does not block the semaphore forever.
+
+3. **Reused LLM client**  
+   The LLM client is created once and reused for all requests (no new connection per request).
+
+4. **Optional response cache**  
+   Identical requests (same `topic`, `grade`, `context`, `n_slides`) can be served from an in-memory cache to reduce API calls:
+   ```env
+   CACHE_ENABLED=true
+   CACHE_TTL_SECONDS=300
+   CACHE_MAX_SIZE=100
+   ```
+   Cache applies only to **POST /slide** (full deck), not to streaming.
+
+5. **Multiple workers**  
+   For CPU headroom, run more Uvicorn workers (each has its own semaphore and cache):
+   ```bash
+   uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+   ```
+   Use with care: each worker uses its own memory and LLM client.
+
+---
+
 ## Tests
 
 Install dev dependencies and run pytest:
@@ -101,6 +135,7 @@ Tests cover:
 
 - **Models** (`tests/test_models.py`): Pydantic validation for `Slide`, `SlideQuestion`, `SlideDeckRequest`, `SlideDeckResponse`.
 - **API** (`tests/test_api.py`): Health, POST /slide and POST /streaming with **mocked** LLM (no API key needed).
+- **High load** (`tests/test_high_load.py`): 25 concurrent POST /slide and 15 concurrent POST /streaming; verifies semaphore and server stability (no API key needed).
 
 ---
 
@@ -226,10 +261,10 @@ import json
 import asyncio
 
 payload = {
-    "topic": "Photosynthesis",
-    "grade": "6th grade",
+    "topic": "Dota 2",
+    "grade": "8th grade",
     "context": "",
-    "n_slides": 3
+    "n_slides": 5
 }
 
 async def main():
